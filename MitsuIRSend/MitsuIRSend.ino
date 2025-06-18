@@ -21,8 +21,8 @@
 #include <ArduinoOTA.h>
 
 // WiFi credentials
-const char* WIFI_SSID     = "WIFINAME";
-const char* WIFI_PASSWORD = "XXXXXXXX";
+const char* WIFI_SSID     = "No LAN for the Wicked_IoT";
+const char* WIFI_PASSWORD = "Kanapissi1";
 
 // Weekly reboot
 time_t now;
@@ -152,9 +152,6 @@ void setup() {
 
 void loop() {
 
-  //Check if WIFI has disconnected
-  tryReconnectWiFi();
-
   //DO LOOP
   button.loop();             // Poll button state
   ArduinoOTA.handle();       // Handle OTA events
@@ -168,7 +165,7 @@ void loop() {
   mqttClient.loop();
 
   time(&now);
-localtime_r(&now, &timeinfo);
+  localtime_r(&now, &timeinfo);
 
   // Check if it's Sunday (0 = Sunday) and 01:00:00 exactly
   if (timeinfo.tm_wday == 0 && timeinfo.tm_hour == 1 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0 && !rebootedToday) {
@@ -182,6 +179,9 @@ localtime_r(&now, &timeinfo);
   if (timeinfo.tm_hour == 2) {
     rebootedToday = false;
   }
+
+  //Check if WIFI has disconnected
+  tryReconnectWiFi();
 }
 
 void connectWiFi() {
@@ -191,7 +191,9 @@ void connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(backoff + random(0, 500));  // Add jitter
     backoff = min(backoff * 2, (unsigned long)5000);  // Cap at 5s
+    Serial.println("WiFi not connected, trying to reconnect...");
   }
+  Serial.println("WiFi connected");
 }
 
 //Reconnect to WIFI if lost connection
@@ -338,11 +340,17 @@ mqttClient.publish("homeassistant/climate/mitsu_ir_ac/config", buf, true);
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   // Build lowercase payload string
   String msg;
+
   for (unsigned int i = 0; i < length; i++) {
     msg += (char)payload[i];
   }
   msg.toLowerCase();
   msg.trim();
+
+    Serial.print("MQTT topic: ");
+    Serial.println(topic);
+    Serial.print("MQTT payload: ");
+    Serial.println(msg);
 
   // ───── POWER SET ─────
   if (String(topic) == TOPIC_POWER_SET) {
@@ -390,13 +398,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   else if (String(topic) == TOPIC_FAN_SET) {
     // msg is one of "auto","low","medium","high","max","quiet"
     int code;
-    if      (msg == "auto")   code = 0;
-    else if (msg == "low")    code = 1;
-    else if (msg == "medium") code = 2;
-    else if (msg == "high")   code = 3;
-    else if (msg == "max")    code = 4;
-    else if (msg == "quiet")  code = 6;
-    else if (msg == "maxmax")    code = 5;
+    if      (msg == "auto" || msg == "0") code = 0;
+    else if (msg == "low"  || msg == "1") code = 1;
+    else if (msg == "medium" || msg == "2") code = 2;
+    else if (msg == "high" || msg == "3") code = 3;
+    else if (msg == "max"  || msg == "4") code = 4;
+    else if (msg == "maxmax" || msg == "5") code = 4;
+    else if (msg == "quiet" || msg == "6") code = 6;
     else {
       Serial.print("⮕ Unmapped fan_mode ‘");
       Serial.print(msg);
@@ -460,7 +468,18 @@ void publishState() {
   mqttClient.publish(IR_TOPIC_POWER_STATE, isOn ? "ON" : "OFF", true);
   mqttClient.publish(IR_TOPIC_MODE_STATE,  mode.c_str(), true);
   mqttClient.publish(IR_TOPIC_TEMP_STATE, String(temperature).c_str(), true);
-  mqttClient.publish(IR_TOPIC_FAN_STATE, String(fanSpeed).c_str(), true);
+  const char* fanModes[] = {
+    "auto",   // 0
+    "low",    // 1
+    "medium", // 2
+    "high",   // 3 ← THIS is the one that was showing UNKNOWN
+    "max",    // 4
+    "maxmax", // 5 (if supported)
+    "quiet"       // 6 (empty or quiet)
+
+  };
+  mqttClient.publish(IR_TOPIC_FAN_STATE, fanModes[fanSpeed], true);
+
   
   // Arrays of option strings for mapping indices back to human-readable state
   const char* vaneOptions[] = {"auto","highest","high","middle","low","lowest","","swing"};
