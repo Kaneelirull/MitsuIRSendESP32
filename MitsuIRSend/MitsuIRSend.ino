@@ -21,8 +21,8 @@
 #include <ArduinoOTA.h>
 
 // WiFi credentials
-const char* WIFI_SSID     = "No LAN for the Wicked_IoT";
-const char* WIFI_PASSWORD = "Kanapissi1";
+const char* WIFI_SSID     = "WIFINAME";
+const char* WIFI_PASSWORD = "XXXXXXXX";
 
 // Weekly reboot
 time_t now;
@@ -151,6 +151,11 @@ void setup() {
 }
 
 void loop() {
+
+  //Check if WIFI has disconnected
+  tryReconnectWiFi();
+
+  //DO LOOP
   button.loop();             // Poll button state
   ArduinoOTA.handle();       // Handle OTA events
 
@@ -167,7 +172,7 @@ localtime_r(&now, &timeinfo);
 
   // Check if it's Sunday (0 = Sunday) and 01:00:00 exactly
   if (timeinfo.tm_wday == 0 && timeinfo.tm_hour == 1 && timeinfo.tm_min == 0 && timeinfo.tm_sec == 0 && !rebootedToday) {
-    Serial.println("🌀 Scheduled reboot triggered.");
+    Serial.println("Scheduled reboot triggered.");
     rebootedToday = true;
     delay(1000);  // Allow time for MQTT/Serial flush if needed
     ESP.restart();
@@ -186,6 +191,18 @@ void connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(backoff + random(0, 500));  // Add jitter
     backoff = min(backoff * 2, (unsigned long)5000);  // Cap at 5s
+  }
+}
+
+//Reconnect to WIFI if lost connection
+void tryReconnectWiFi() {
+  static unsigned long lastWifiAttempt = 0;
+
+  if (WiFi.status() != WL_CONNECTED && millis() - lastWifiAttempt > 10000) {
+    Serial.println("WiFi disconnected, trying to reconnect...");
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    lastWifiAttempt = millis();
   }
 }
 
